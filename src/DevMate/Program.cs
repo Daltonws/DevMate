@@ -55,9 +55,88 @@
 
 // app.Run();
 
+// //working code
+// using Microsoft.AspNetCore.Mvc;
+// using Octokit;
+// using System.Net.WebSockets;
+// using System.Text;
+// using System.Text.Json;
+
+// var builder = WebApplication.CreateBuilder(args);
+// var app = builder.Build();
+
+// app.MapGet("/", () => "Hello Copilot!");
+
+// // GitHub app name and WebSocket URL
+// string yourGitHubAppName = "DeveMate";
+// string awsWebSocketUrl = "wss://cs0esv0jte.execute-api.us-east-1.amazonaws.com/dev/";
+
+// app.MapPost("/agent", async (
+//     [FromHeader(Name = "X-GitHub-Token")] string githubToken, 
+//     [FromBody] Request userRequest) =>
+// {
+//     // Identify the user using the GitHub API token provided in the request headers
+//     var octokitClient = new GitHubClient(new Octokit.ProductHeaderValue(yourGitHubAppName))
+//     {
+//         Credentials = new Credentials(githubToken)
+//     };
+//     var user = await octokitClient.User.Current();
+
+//     // Insert special system messages
+//     userRequest.Messages.Insert(0, new Message
+//     {
+//         Role = "system",
+//         Content = $"Start every response with the user's name, which is @{user.Login}"
+//     });
+//     userRequest.Messages.Insert(0, new Message
+//     {
+//         Role = "system",
+//         Content = "You are a Sr Developer that is there to help other developers find the information they are looking for."
+//     });
+
+//     // Create a WebSocket client to connect to the AWS WebSocket API
+//     using var webSocket = new ClientWebSocket();
+//     await webSocket.ConnectAsync(new Uri(awsWebSocketUrl), CancellationToken.None);
+
+//     // Serialize userRequest to JSON
+//     var requestJson = JsonSerializer.Serialize(userRequest);
+//     var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+//     var requestBuffer = new ArraySegment<byte>(requestBytes);
+
+//     // Send the user request to the WebSocket API
+//     await webSocket.SendAsync(requestBuffer, WebSocketMessageType.Text, true, CancellationToken.None);
+
+//     // Prepare a buffer to receive the response
+//     var responseBuffer = new ArraySegment<byte>(new byte[1024]);
+//     var receivedData = new StringBuilder();
+
+//     // Stream the response back to the client as it arrives
+//     WebSocketReceiveResult result;
+//     do
+//     {
+//         result = await webSocket.ReceiveAsync(responseBuffer, CancellationToken.None);
+//         if (responseBuffer.Array != null)
+//         {
+//             receivedData.Append(Encoding.UTF8.GetString(responseBuffer.Array, 0, result.Count));
+//         }
+//     } while (!result.EndOfMessage);
+
+//     // Close the WebSocket connection
+//     await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None);
+
+//     // Return the response data as JSON
+//     return Results.Json(receivedData.ToString());
+// });
+
+// // Callback endpoint for GitHub app installation
+// app.MapGet("/callback", () => "You may close this tab and return to GitHub.com (where you should refresh the page and start a fresh chat). If you're using VS Code or Visual Studio, return there.");
+
+// app.Run();
+// //End of  working code
+
 using Microsoft.AspNetCore.Mvc;
 using Octokit;
-using System.Net.WebSockets;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 
@@ -66,9 +145,9 @@ var app = builder.Build();
 
 app.MapGet("/", () => "Hello Copilot!");
 
-// GitHub app name and WebSocket URL
+// GitHub app name and AWS RESTful API URL
 string yourGitHubAppName = "DeveMate";
-string awsWebSocketUrl = "wss://cs0esv0jte.execute-api.us-east-1.amazonaws.com/dev/";
+string awsApiUrl = "https://a6b66wpks5.execute-api.us-east-1.amazonaws.com/dev/agent";
 
 app.MapPost("/agent", async (
     [FromHeader(Name = "X-GitHub-Token")] string githubToken, 
@@ -93,38 +172,16 @@ app.MapPost("/agent", async (
         Content = "You are a Sr Developer that is there to help other developers find the information they are looking for."
     });
 
-    // Create a WebSocket client to connect to the AWS WebSocket API
-    using var webSocket = new ClientWebSocket();
-    await webSocket.ConnectAsync(new Uri(awsWebSocketUrl), CancellationToken.None);
-
-    // Serialize userRequest to JSON
+    // Set up HTTP client and send the request to the AWS API Gateway
+    using var httpClient = new HttpClient();
     var requestJson = JsonSerializer.Serialize(userRequest);
-    var requestBytes = Encoding.UTF8.GetBytes(requestJson);
-    var requestBuffer = new ArraySegment<byte>(requestBytes);
+    var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
 
-    // Send the user request to the WebSocket API
-    await webSocket.SendAsync(requestBuffer, WebSocketMessageType.Text, true, CancellationToken.None);
-
-    // Prepare a buffer to receive the response
-    var responseBuffer = new ArraySegment<byte>(new byte[1024]);
-    var receivedData = new StringBuilder();
-
-    // Stream the response back to the client as it arrives
-    WebSocketReceiveResult result;
-    do
-    {
-        result = await webSocket.ReceiveAsync(responseBuffer, CancellationToken.None);
-        if (responseBuffer.Array != null)
-        {
-            receivedData.Append(Encoding.UTF8.GetString(responseBuffer.Array, 0, result.Count));
-        }
-    } while (!result.EndOfMessage);
-
-    // Close the WebSocket connection
-    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None);
+    var response = await httpClient.PostAsync(awsApiUrl, content);
+    var responseData = await response.Content.ReadAsStringAsync();
 
     // Return the response data as JSON
-    return Results.Json(receivedData.ToString());
+    return Results.Json(responseData);
 });
 
 // Callback endpoint for GitHub app installation
